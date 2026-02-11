@@ -12,3 +12,6 @@
 /WiDS2025/mlruns/models/
 /WiDS2025/mlruns/557495972463532595/
 /WiDS2025/mlruns/models/
+
+# Jupyter
+**/.ipynb_checkpoints
