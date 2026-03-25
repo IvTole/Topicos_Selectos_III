@@ -5,8 +5,12 @@ import time
 REGION = 'us-east-2'
 INSTANCE_NAME = 'ecom_instance'
 SECURITY_GROUP_NAME = 'security-group-ecom'
+STREAM_NAME = 'Clientorders'
 DELIVERY_STREAM_NAME = 'Purchaselogs'
 BUCKET_NAME = 'ecom-purchaselogs-bucket'
+TABLE_NAME = 'ClientOrders'
+FUNCTION_NAME = 'KinesisToClientOrders'
+LAMBDA_ROLE_NAME = 'Lambda-Kinesis-DynamoDB-Role'
 FIREHOSE_ROLE_NAME = 'FirehoseDeliveryRole'
 EC2_ROLE_NAME = 'EC2-Kinesis-Role'
 INSTANCE_PROFILE_NAME = 'EC2-Kinesis-InstanceProfile'
@@ -46,6 +50,21 @@ def delete_security_group():
             print(f'Security group {SECURITY_GROUP_NAME} not found')
         else:
             print(f'Error deleting security group: {e}')
+
+def delete_kinesis_stream():
+    print('\nDeleting Kinesis stream...')
+    kinesis_client = boto3.client('kinesis', region_name=REGION)
+    
+    try:
+        kinesis_client.delete_stream(
+            StreamName=STREAM_NAME,
+            EnforceConsumerDeletion=True
+        )
+        print(f'Kinesis stream {STREAM_NAME} deleted')
+    except kinesis_client.exceptions.ResourceNotFoundException:
+        print(f'Kinesis stream {STREAM_NAME} not found')
+    except Exception as e:
+        print(f'Error deleting Kinesis stream: {e}')
 
 def delete_firehose_stream():
     print('\nDeleting Firehose delivery stream...')
@@ -105,6 +124,16 @@ def delete_iam_roles():
     except iam_client.exceptions.NoSuchEntityException:
         print(f'Role {EC2_ROLE_NAME} not found')
     
+    # Delete Lambda role
+    try:
+        policies = iam_client.list_role_policies(RoleName=LAMBDA_ROLE_NAME)
+        for policy in policies['PolicyNames']:
+            iam_client.delete_role_policy(RoleName=LAMBDA_ROLE_NAME, PolicyName=policy)
+        iam_client.delete_role(RoleName=LAMBDA_ROLE_NAME)
+        print(f'Role {LAMBDA_ROLE_NAME} deleted')
+    except iam_client.exceptions.NoSuchEntityException:
+        print(f'Role {LAMBDA_ROLE_NAME} not found')
+    
     # Delete Firehose role
     try:
         policies = iam_client.list_role_policies(RoleName=FIREHOSE_ROLE_NAME)
@@ -115,14 +144,50 @@ def delete_iam_roles():
     except iam_client.exceptions.NoSuchEntityException:
         print(f'Role {FIREHOSE_ROLE_NAME} not found')
 
+def delete_lambda_function():
+    print('\nDeleting Lambda function...')
+    lambda_client = boto3.client('lambda', region_name=REGION)
+    
+    try:
+        # Delete event source mappings first
+        mappings = lambda_client.list_event_source_mappings(FunctionName=FUNCTION_NAME)
+        for mapping in mappings['EventSourceMappings']:
+            lambda_client.delete_event_source_mapping(UUID=mapping['UUID'])
+            print(f'Event source mapping {mapping["UUID"]} deleted')
+    except lambda_client.exceptions.ResourceNotFoundException:
+        pass
+    
+    try:
+        lambda_client.delete_function(FunctionName=FUNCTION_NAME)
+        print(f'Lambda function {FUNCTION_NAME} deleted')
+    except lambda_client.exceptions.ResourceNotFoundException:
+        print(f'Lambda function {FUNCTION_NAME} not found')
+    except Exception as e:
+        print(f'Error deleting Lambda function: {e}')
+
+def delete_dynamodb_table():
+    print('\nDeleting DynamoDB table...')
+    dynamodb = boto3.client('dynamodb', region_name=REGION)
+    
+    try:
+        dynamodb.delete_table(TableName=TABLE_NAME)
+        print(f'DynamoDB table {TABLE_NAME} deleted')
+    except dynamodb.exceptions.ResourceNotFoundException:
+        print(f'DynamoDB table {TABLE_NAME} not found')
+    except Exception as e:
+        print(f'Error deleting DynamoDB table: {e}')
+
 if __name__ == '__main__':
     print('Starting cleanup...\n')
     
     delete_ec2_instances()
     time.sleep(5)
     delete_security_group()
+    delete_lambda_function()
+    delete_kinesis_stream()
     delete_firehose_stream()
     time.sleep(5)
+    delete_dynamodb_table()
     delete_s3_bucket()
     delete_iam_roles()
     

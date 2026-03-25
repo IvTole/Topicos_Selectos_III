@@ -5,7 +5,9 @@ Este proyecto automatiza la creación de una pipeline de datos en AWS que genera
 ## Arquitectura
 
 ```
-EC2 Instance (LogGenerator) → Kinesis Agent → Firehose → S3 Bucket
+EC2 Instance (LogGenerator) → Kinesis Agent → Kinesis Stream → Lambda → DynamoDB
+                                    ↓
+                                Firehose → S3 Bucket
 ```
 
 ## Requisitos
@@ -45,7 +47,14 @@ python create_bucket.py
 ```
 - Crea el bucket donde se almacenarán los logs
 
-### 3. Crear Firehose Delivery Stream
+### 3. Crear Kinesis Stream
+```bash
+python create_kinesis_stream.py
+```
+- Crea el stream `Clientorders` con 1 shard
+- Espera a que el stream esté activo
+
+### 4. Crear Firehose Delivery Stream
 ```bash
 python create_firehose.py
 ```
@@ -53,14 +62,14 @@ python create_firehose.py
 - Crea el delivery stream `Purchaselogs`
 - Configura el destino S3
 
-### 4. Crear Rol IAM para EC2
+### 5. Crear Rol IAM para EC2
 ```bash
 python create_ec2_role.py
 ```
-- Crea el rol con permisos para Kinesis Firehose
+- Crea el rol con permisos para Kinesis Streams y Firehose
 - Crea el instance profile necesario
 
-### 5. Lanzar Instancia EC2
+### 6. Lanzar Instancia EC2
 ```bash
 python create_instance.py
 ```
@@ -69,7 +78,27 @@ python create_instance.py
 - Ejecuta `user_data.sh` para configurar automáticamente:
   - Instala Kinesis Agent
   - Descarga LogGenerator
-  - Configura el agente para enviar logs a Firehose
+  - Configura el agente para enviar logs a:
+    - Kinesis Stream `Clientorders` (con conversión CSV→JSON)
+    - Firehose `Purchaselogs` (datos raw)
+
+### 7. Crear Tabla DynamoDB
+```bash
+python create_dynamodb.py
+```
+- Crea la tabla `ClientOrders`
+- Partition Key: `CustomerID` (Number)
+- Sort Key: `OrderID` (String)
+- Billing: Pay-per-request
+
+### 8. Crear Función Lambda
+```bash
+python create_lambda.py
+```
+- Crea el rol IAM para Lambda con permisos de Kinesis y DynamoDB
+- Crea la función `KinesisToClientOrders`
+- Configura trigger desde Kinesis Stream `Clientorders`
+- Procesa datos y los escribe en DynamoDB
 
 ## Verificación
 
@@ -110,15 +139,18 @@ python list_key_pairs.py
 
 **Elimina TODOS los recursos cuando termines:**
 ```bash
-python cleanup_all.py
+python cleanup.py
 ```
 
 Este script elimina en orden:
 1. Instancias EC2
 2. Security groups
-3. Firehose delivery stream
-4. Bucket S3 (y todo su contenido)
-5. Roles IAM
+3. Función Lambda y sus triggers
+4. Kinesis Stream
+5. Firehose delivery stream
+6. Tabla DynamoDB
+7. Bucket S3 (y todo su contenido)
+8. Roles IAM
 
 ## Estructura de Archivos
 
@@ -127,11 +159,15 @@ Este script elimina en orden:
 ├── create_key.py           # Crea key pair para SSH
 ├── list_key_pairs.py       # Lista key pairs existentes
 ├── create_bucket.py        # Crea bucket S3
+├── create_kinesis_stream.py # Crea Kinesis Stream
 ├── create_firehose.py      # Crea Firehose y su rol IAM
 ├── create_ec2_role.py      # Crea rol IAM para EC2
 ├── create_instance.py      # Lanza instancia EC2
+├── create_dynamodb.py      # Crea tabla DynamoDB
+├── create_lambda.py        # Crea función Lambda con trigger
+├── lambda_function.py      # Código de la función Lambda
 ├── user_data.sh           # Script de inicialización de la instancia
-├── cleanup_all.py         # Elimina todos los recursos
+├── cleanup.py             # Elimina todos los recursos
 └── README.md              # Este archivo
 ```
 
@@ -169,7 +205,7 @@ Con Free Tier:
 - Kinesis Firehose: Primeros 500GB gratis
 - Transferencia de datos: Primeros 100GB gratis
 
-**Importante**: Ejecuta `cleanup_all.py` cuando termines para evitar cargos.
+**Importante**: Ejecuta `cleanup.py` cuando termines para evitar cargos.
 
 ## Conceptos Aprendidos
 

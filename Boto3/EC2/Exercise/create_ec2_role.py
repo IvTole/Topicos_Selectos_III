@@ -32,8 +32,8 @@ def create_ec2_role():
         role_arn = role_response['Role']['Arn']
         print(f'Role {ROLE_NAME} already exists: {role_arn}')
     
-    # Policy para Kinesis Firehose
-    firehose_policy = {
+    # Policy para Kinesis Firehose y Kinesis Streams
+    kinesis_policy = {
         "Version": "2012-10-17",
         "Statement": [
             {
@@ -42,6 +42,15 @@ def create_ec2_role():
                     "firehose:PutRecord",
                     "firehose:PutRecordBatch",
                     "firehose:DescribeDeliveryStream"
+                ],
+                "Resource": "*"
+            },
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "kinesis:PutRecord",
+                    "kinesis:PutRecords",
+                    "kinesis:DescribeStream"
                 ],
                 "Resource": "*"
             },
@@ -58,10 +67,10 @@ def create_ec2_role():
     try:
         iam_client.put_role_policy(
             RoleName=ROLE_NAME,
-            PolicyName='KinesisFirehosePolicy',
-            PolicyDocument=json.dumps(firehose_policy)
+            PolicyName='KinesisAccessPolicy',
+            PolicyDocument=json.dumps(kinesis_policy)
         )
-        print('Kinesis Firehose policy attached')
+        print('Kinesis Firehose and Streams policy attached')
     except Exception as e:
         print(f'Error attaching policy: {e}')
     

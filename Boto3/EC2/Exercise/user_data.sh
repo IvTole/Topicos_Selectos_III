@@ -25,10 +25,24 @@ sudo chown ec2-user:ec2-user /var/log/cadabra
 sudo cat > /etc/aws-kinesis/agent.json << 'EOF'
 {
   "cloudwatch.emitMetrics": true,
-  "kinesis.endpoint": "",
+  "kinesis.endpoint": "kinesis.us-east-2.amazonaws.com",
   "firehose.endpoint": "firehose.us-east-2.amazonaws.com",
 
+  "awsAccessKeyId": "",
+  "awsSecretAccessKey": "",
+
   "flows": [
+    {
+      "filePattern": "/var/log/cadabra/*.log",
+      "kinesisStream": "Clientorders",
+      "partitionKeyOption": "RANDOM",
+      "dataProcessingOptions": [
+         {
+            "optionName": "CSVTOJSON",
+            "customFieldNames": ["InvoiceNo", "StockCode", "Description", "Quantity", "InvoiceDate", "UnitPrice", "Customer", "Country"]
+         }
+      ]
+    },	  
     {
       "filePattern": "/var/log/cadabra/*.log",
       "deliveryStream": "Purchaselogs"
